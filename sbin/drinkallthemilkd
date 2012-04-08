@@ -1,0 +1,193 @@
+#!/usr/bin/php
+<?php
+$npid = pcntl_fork();
+if($npid) {
+	exit;
+}
+
+fclose(STDIN);
+fclose(STDOUT);
+fclose(STDERR);
+
+declare(ticks = 1);
+
+//Create some default configs.
+$GLOBALS['pwd'] = dirname(__FILE__);
+$GLOBALS['pid_file'] = '/var/run/drinkallthemilkd.pid';
+$GLOBALS['log_file'] = '/var/log/drinkallthemilkd.log';
+$GLOBALS['loaded'] = false;
+$GLOBALS['loading'] = false;
+$GLOBALS['loop_img'] = '';
+$GLOBALS['loop_dev'] = '/dev/loop0';
+$GLOBALS['volume_name'] = 'encrypted-shadow';
+$GLOBALS['symmetric_key'] = '/etc/drinkallthemilk/skey';
+
+//override defaults config with custom stuff.
+include_once '/etc/drinkallthemilk/drinkallthemilk.conf.php';
+
+function mylog($l) {
+	file_put_contents($GLOBALS['log_file'], $l, FILE_APPEND);
+}
+//initation
+function init() {
+	file_put_contents($GLOBALS['pid_file'], posix_getpid());
+	register_shutdown_function('wipe');
+	
+	//look for stuff right away.
+	
+	if(file_exists(sprintf('/media/%s/shadow', $GLOBALS['volume_name']))) {
+		dismount();
+	}
+	loadShadow();
+}
+
+//get a list of media that has a target file in the root of it's dir tree.
+function getList() {
+	$out = array();
+	exec('ls /media/*/en-shad.img 2> /dev/null', $out);
+	return $out;
+}
+
+function testEnShadVol() {
+	$out = array();
+	exec(sprintf('if [ -d /media/%s ]; then echo 1; fi;', $GLOBALS['volume_name']),$out);
+	//var_dump((bool)count($out));
+	return (bool)count($out);
+}
+function dismount() {
+	//var_dump('No shadow images located.');
+	$GLOBALS['loaded'] = false;
+	$GLOBALS['loop_img'] = '';
+	//echo "Cleaning up\r\n";
+	//unmount
+	exec(sprintf('umount /media/%s', $GLOBALS['volume_name']));
+	//close luks
+	exec(sprintf('cryptsetup luksClose /dev/mapper/%s', $GLOBALS['volume_name']));
+	//disengage the loop
+	exec(sprintf('losetup -d %s', $GLOBALS['loop_dev']));
+	//remove /media/{name}
+	exec(sprintf('rm -R /media/%s', $GLOBALS['volume_name']));
+	//remove /etc/shadow link
+	
+	if(file_exists('/etc/shadow.drinkallthemilk')) {
+		exec('rm -f /etc/shadow');
+		//move backup shadow to /etc/shadow
+		exec('mv /etc/shadow.drinkallthemilk /etc/shadow');
+	}
+	//clear backup
+	//exec('rm /etc/shadow.drinkallthemilk');
+}
+
+//.
+function wipe() {
+	//echo "Exiting...\r\n";
+	dismount();
+	exit();
+}
+
+function loadShadow() {
+	//echo "Load Shadow\r\n";
+	//return 0;
+	//if(file_exists(sprintf('/media/%s/shadow',$GLOBALS['volume_name']))) {
+	if(testEnShadVol()) {
+		//echo "it exists already!\r\n";
+		return;
+	}
+	
+	if($GLOBALS['loading']) { return; }
+	
+	$GLOBALS['loading'] = true;
+	
+	try {
+		$shad_imgs = getList();
+		$et = time() + 10;
+		if(!$GLOBALS['loaded'] && count($shad_imgs) == 0) {
+			while($et > time()) {
+				$shad_imgs = getList();
+				usleep(100000);
+			}
+		}
+		
+		if(!$GLOBALS['loaded'] && count($shad_imgs) > 0) {
+			//var_dump($shad_imgs);
+			//use first one.
+			//might try all existing??
+			$GLOBALS['loaded'] = true;
+			$GLOBALS['loop_img'] = $shad_imgs[0];
+			
+			$cmd_out = array();
+			$rtnv = 0;
+			//check current loop device
+			$GLOBALS['loop_dev'] = trim(shell_exec('losetup -f'));
+			//need to flag a file as blacklisted so we don't have bad loops
+			if($rtnv != 0) { return; } 
+			
+			//load encrypted image in to losetup
+			exec(sprintf('losetup %s %s', $GLOBALS['loop_dev'], $GLOBALS['loop_img']), $cmd_out, $rtnv);
+			if($rtnv != 0) { dismount(); return; }
+
+			//luks the shit out of it
+			exec(sprintf('cryptsetup -q --key-file %s luksOpen %s %s', $GLOBALS['symmetric_key'], $GLOBALS['loop_dev'], $GLOBALS['volume_name']), $cmd_out, $rtnv);
+			if($rtnv != 0) { dismount(); return; }
+			
+			//mount volume
+			exec(sprintf('mkdir /media/%s', $GLOBALS['volume_name']), $cmd_out, $rtnv);
+			if($rtnv != 0) { dismount(); return; }
+			
+			exec(sprintf('mount /dev/mapper/%s /media/%s', $GLOBALS['volume_name'], $GLOBALS['volume_name']), $cmd_out, $rtnv);
+			if($rtnv != 0) { dismount(); return; }
+			
+			//copy old shadow file to another location
+			exec('cp /etc/shadow /etc/shadow.drinkallthemilk', $cmd_out, $rtnv);
+			if($rtnv != 0) { dismount(); return; }
+
+			//link encrypted shadow to /etc/shadow
+			//exec('shred -u -n 1 /etc/shadow');
+			exec('rm -f /etc/shadow');
+			exec(sprintf('ln -sf /media/%s/shadow /etc/shadow', $GLOBALS['volume_name']), $cmd_out, $rtnv);
+			
+			if($rtnv != 0) { dismount(); return; }
+		} else if($GLOBALS['loaded'] && count($shad_imgs) == 0) {
+			//echo "dismounting...";
+			dismount();
+		}
+	} catch(Exception $e) {
+		dismount();
+	}
+	
+	$GLOBALS['loading'] = false;
+}
+
+function unloadShadow() {
+
+	//echo "Unloading shadow\r\n";
+	//return;
+	$GLOBALS['loading'] = true;
+	try {
+		dismount();
+	} catch(Exception $e) {}
+	$GLOBALS['loading'] = false;
+}
+
+
+init();
+
+pcntl_signal(SIGHUP, 'loadShadow');
+pcntl_signal(SIGUSR1, 'unloadShadow');
+pcntl_signal(SIGTERM, 'wipe');
+$last_check_runtime = time() + 60;
+while(true) {
+	//echo "1";
+	if($last_check_runtime < time()) {
+		if($GLOBALS['loaded'] == false && testEnShadVol()) {
+			dismount();
+			echo "1";
+		}
+	}
+	usleep(10000);
+}
+/*NOTES
+http://en.wikipedia.org/wiki/Signal_(computing)
+http://serverfault.com/questions/229759/launching-a-php-daemon-from-an-lsb-init-script-w-start-stop-daemon
+*/
+?>

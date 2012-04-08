@@ -1,0 +1,2 @@
+ACTION=="add", SUBSYSTEM=="usb", RUN+="/usr/sbin/datm-ntfy"
+ACTION=="remove", SUBSYSTEM=="usb", RUN+="/usr/sbin/datm-ntfy"

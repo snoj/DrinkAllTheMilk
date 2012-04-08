@@ -1,0 +1,38 @@
+Drink all the Milk
+
+While watching Hak5 1106, I wondered if it would be possible to do a similar thing but with encrypted volumes instead of encrypting/decrypting and file copying.
+
+
+THINGS TO KEEP IN MIND
+I'm no excryption connosier or pen tester, so I don't know if this method is better really. Additionally, I'm fairly new to linux scripting 
+
+LICENSE
+As far as I care, this is a public domain work and is probably very unstable...we are mucking with the shadow file after all. Use at your own RISK.
+
+USING
+Prereq: php5
+
+#install
+sudo make install
+
+#create encrypted img with a copy of the current /etc/shadow file.
+sudo datm-setup
+
+#you will find a file called "en-shad.img" under /root. Copy this to your usb thumb/jump drive.
+
+HOW IT WORKS
+
+	drinkallthemilkd watches for new mounts in /media that contain en-shad.img. (ls /media/*/en-shad.img)
+
+	If one is found it attempts to use the skey found in /etc/drinkallthemilk to do a losetup/cryptsetup/mount process on the file. 
+	
+	Once the file is mounted it then copies /etc/shadow to /etc/shadow.drinkallthemilk, deletes the original and places a link to the one on the thumb drive.
+	
+	When the drive is removed, the process is reversed and the original shadow file is restored.
+	
+NOTES
+	Written and tested on Ubuntu 11.10. 
+LINKS
+http://hak5.org/episodes/hak5-1106
+https://github.com/godsflaw/killallthehumans
+

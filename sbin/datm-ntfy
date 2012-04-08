@@ -1,0 +1,31 @@
+#!/usr/bin/php
+<?php
+if(!isset($_SERVER['ID_SERIAL_SHORT'])) {
+	die();
+}
+
+$p = file_get_contents('/var/run/drinkallthemilkd.pid');
+
+if($_SERVER['ACTION'] == 'add') {
+	exec("kill -s 1 {$p}");
+} else if($_SERVER['ACTION'] == 'remove') {
+	exec("kill -s 10 {$p}");
+}
+
+exit;
+
+$out = array();
+
+exec('ls /media/*/en-shad.img', $out);
+$a = implode("\r\n", $out);
+$a.= print_r($_SERVER, 1);
+$a.= print_r($argv, 1);
+
+file_put_contents("/var/log/udev.actions.log", $a); //, FILE_APPEND
+//file_put_contents("/var/log/udev.actions.log", time());
+
+//NOTES
+/*
+http://serverfault.com/questions/229759/launching-a-php-daemon-from-an-lsb-init-script-w-start-stop-daemon
+*/
+?>
