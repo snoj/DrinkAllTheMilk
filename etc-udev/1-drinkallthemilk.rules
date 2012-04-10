@@ -1,2 +1,7 @@
-ACTION=="add", SUBSYSTEM=="usb", RUN+="/usr/sbin/datm-ntfy"
-ACTION=="remove", SUBSYSTEM=="usb", RUN+="/usr/sbin/datm-ntfy"
+#KERNEL=="sd[b-g]", ACTION=="add", SUBSYSTEM=="usb", RUN+="/usr/sbin/datm-ntfy '%k'"
+
+KERNEL=="sd[b-g]", ACTION=="add", RUN+="/usr/sbin/datm-ntfy '%k'"
+
+#KERNEL=="sd[b-g]", ACTION=="remove", SUBSYSTEM=="usb", RUN+="/usr/sbin/datm-ntfy '%k'"
+
+KERNEL=="sd[b-g]", ACTION=="remove", RUN+="/usr/sbin/datm-ntfy '%k'"

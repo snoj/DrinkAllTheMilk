@@ -1,5 +1,8 @@
 #!/usr/bin/php
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors','On');
+ini_set('error_log','/var/log/datm-notify.log');
 if(!isset($_SERVER['ID_SERIAL_SHORT'])) {
 	die();
 }
@@ -7,9 +10,26 @@ if(!isset($_SERVER['ID_SERIAL_SHORT'])) {
 $p = file_get_contents('/var/run/drinkallthemilkd.pid');
 
 if($_SERVER['ACTION'] == 'add') {
+	//mount partions.
+	for($i=1;$i<=$_SERVER['UDISKS_PARTITION_TABLE_COUNT'];$i++) {
+		//mkdir /media/{ID_SERIAL_SHORT}{I};
+		exec(sprintf('mkdir /media/datm-%s-%s', $_SERVER['ID_SERIAL_SHORT'], $i));
+		//mount /dev/{argv[1]}{I} /media/{ID_SERIAL_SHORT}{I}
+		exec(sprintf('mount /dev/%s%s /media/datm-%s-%s', $argv[1], $i, $_SERVER['ID_SERIAL_SHORT'], $i));
+	}
+	usleep(500000); // 500 milli
+	
 	exec("kill -s 1 {$p}");
 } else if($_SERVER['ACTION'] == 'remove') {
 	exec("kill -s 10 {$p}");
+	//wait for a bit...prolly could use a loop here to keep checking
+	sleep(2);
+	for($i=1;$i<=$_SERVER['UDISKS_PARTITION_TABLE_COUNT'];$i++) {
+		//umount -f /media/{ID_SERIAL_SHORT}{I}
+		exec(sprintf('umount -fl /media/datm-%s-%s', $_SERVER['ID_SERIAL_SHORT'], $i));
+		//rm -R /media/{ID_SERIAL_SHORT}{I}
+		exec(sprintf('rm -rf /media/datm-%s-%s', $_SERVER['ID_SERIAL_SHORT'], $i));
+	}
 }
 
 exit;
