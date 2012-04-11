@@ -44,7 +44,8 @@ function init() {
 //get a list of media that has a target file in the root of it's dir tree.
 function getList() {
 	$out = array();
-	exec('ls /media/*/en-shad.img 2> /dev/null', $out);
+	//list /media/datm-* volumes first if they exist.
+	exec('ls /media/datm-*/en-shad.img 2> /dev/null; ls /media/*/en-shad.img 2> /dev/null;', $out);
 	return $out;
 }
 
