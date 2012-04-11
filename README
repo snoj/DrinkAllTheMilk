@@ -4,24 +4,24 @@ While watching Hak5 1106, I wondered if it would be possible to do a similar thi
 
 
 THINGS TO KEEP IN MIND
-I'm no excryption connosier or pen tester, so I don't know if this method is better really. Additionally, I'm fairly new to linux scripting 
+	I'm no encryption connosier or pen tester, so I don't know if this method is better really. Additionally, I'm fairly new to linux scripting 
 
 LICENSE
-As far as I care, this is a public domain work and is probably very unstable...we are mucking with the shadow file after all. Use at your own RISK.
+	As far as I care, this is a public domain work and is probably very unstable...we are mucking with the shadow file after all. Use at your own RISK.
 
 USING
-Prereq: php5
+	Prereq: php5
 
-#install
-sudo make install
+INSTALL
+	sudo make install
+	sudo update-rc.d drinkallthemilk defaults
 
-#create encrypted img with a copy of the current /etc/shadow file.
-sudo datm-setup
+	#create encrypted img with a copy of the current /etc/shadow file.
+	sudo datm-setup
 
-#you will find a file called "en-shad.img" under /root. Copy this to your usb thumb/jump drive.
+	#you will find a file called "en-shad.img" under /root. Copy this to your usb thumb/jump drive.
 
 HOW IT WORKS
-
 	drinkallthemilkd watches for new mounts in /media that contain en-shad.img. (ls /media/*/en-shad.img)
 
 	If one is found it attempts to use the skey found in /etc/drinkallthemilk to do a losetup/cryptsetup/mount process on the file. 
@@ -32,14 +32,15 @@ HOW IT WORKS
 	
 NOTES
 	Written and tested on Ubuntu 11.10. 
+
 LINKS
 	http://hak5.org/episodes/hak5-1106
 	https://github.com/godsflaw/killallthehumans
 
 THANKS
-To the Hak5 crew and company for inspring this ha[c]k.
-My wife for her patience while I ignored her and the kids.
-The giants who came before me, that I stand on their shoulders.
+	To the Hak5 crew and company for inspring this ha[c]k.
+	My wife for her patience while I ignored her and the kids.
+	The giants who came before me, that I stand on their shoulders.
 
 AND REMEMBER KIDS
 	1) Drink all the milk
