@@ -8,17 +8,21 @@ error_reporting(E_ALL);
 ini_set('display_errors','On');
 ini_set('error_log','/var/log/datm-notify.log');
 
-$GLOBALS['pwd'] = dirname(__FILE__);
-$GLOBALS['log_file'] = '/var/log/drinkallthemilkd.log';
-$GLOBALS['loaded'] = false;
-$GLOBALS['loading'] = false;
-$GLOBALS['loop_img'] = '';
-$GLOBALS['loop_dev'] = '/dev/loop0';
-$GLOBALS['volume_name'] = 'encrypted-shadow';
-$GLOBALS['symmetric_key'] = '/etc/drinkallthemilk/skey';
-$GLOBALS['config'] = '/etc/drinkallthemilk/drinkallthemilk.conf.php';
+$conf = array();
+
+$conf['pwd'] = dirname(__FILE__);
+$conf['log_file'] = '/var/log/drinkallthemilkd.log';
+$conf['loaded'] = false;
+$conf['loading'] = false;
+$conf['loop_img'] = '';
+$conf['loop_dev'] = '/dev/loop0';
+$conf['volume_name'] = 'encrypted-shadow';
+$conf['symmetric_key'] = '/etc/drinkallthemilk/skey';
+$conf['config'] = '/etc/drinkallthemilk/drinkallthemilk.conf.php';
+$conf['state'] = sprintf('/etc/drinkallthemilk/state.%s.serialized', $argv[1]);
+$GLOBALS['conf'] =& $conf;
 //override defaults config with custom stuff.
-include_once '/etc/drinkallthemilk/drinkallthemilk.conf.php';
+@include_once '/etc/drinkallthemilk/drinkallthemilk.conf.php';
 
 //region functions
 //get a list of media that has a target file in the root of it's dir tree.
@@ -28,12 +32,34 @@ function getList() {
 	exec('ls /media/datm-*/en-shad.img 2> /dev/null; ls /media/*/en-shad.img 2> /dev/null;', $out);
 	return $out;
 }
-function testEnShadVol($volpath) {
+
+//
+
+//quicker test path...yay bash.
+function testPath($volpath) {
 	$out = array();
 	exec(sprintf('if [ -d %s ]; then echo 1; fi;', $volpath), $out);
 	return (bool)count($out);
 }
 
+//
+function backout($lastaction) {
+	$sp = array();
+	$sp[] = 'losetup';
+	$sp[] = 'cryptsetup';
+	$sp[] = 'mountdir';
+	$sp[] = 'mount';
+	$sp[] = 'shadow';
+	
+	$action = array();
+	$action[] = sprintf('losetup -d %s', $GLOBALS['conf']['loop_dev'];
+	$action[] = sprintf('cryptsetup luksClose /dev/mapper/%s', $GLOBALS['conf']['volume_name']);
+	$action[] = sprintf('rm -Rf /media/%s', $GLOBALS['conf']['volume_name']);
+	$action[] = sprintf('umount /media/%s', $GLOBALS['conf']['volume_name']);
+	//$action[] = 'rm -f /etc/shadow.drinkallthemilk';
+}
+
+//don't use this
 function dismount() {
 	//var_dump('No shadow images located.');
 	$GLOBALS['loaded'] = false;
@@ -61,25 +87,69 @@ function dismount() {
 
 if($_SERVER['ACTION'] == 'add') {
 	//mount the disk(s)
+	
+	//if /media/$GLOBALS[''] exists...stop.
+	if(testPath(sprintf('/media/%s/shadow', $GLOBALS['conf']['volume_name']))) {
+		exit;
+	}
+	
+	
+	
 	for($i=1;$i<=$_SERVER['UDISKS_PARTITION_TABLE_COUNT'];$i++) {
 		//mkdir /media/{ID_SERIAL_SHORT}{I};
-		exec(sprintf('mkdir /media/datm-%s-%s', $_SERVER['ID_SERIAL_SHORT'], $i));
-		//mount /dev/{argv[1]}{I} /media/{ID_SERIAL_SHORT}{I}
-		exec(sprintf('mount /dev/%s%s /media/datm-%s-%s', $argv[1], $i, $_SERVER['ID_SERIAL_SHORT'], $i));
-		
-		//now find the en-shad.img
-		$shads = getList();
-		for($i=0;$i<count($shads);$i++) {
-			try {
-                $GLOBALS['loop_img'] = $shads[$i];
-                
-			} catch(Exception $e) {  }
+		//could probably do this in the exec string?
+		if(!testPath(sprintf('mkdir /media/datm-%s-%s', $_SERVER['ID_SERIAL_SHORT'], $i))) {
+			exec(sprintf('mkdir /media/datm-%s-%s', $_SERVER['ID_SERIAL_SHORT'], $i));
 		}
+		
+		//mount the drive
+		//mount /dev/{argv[1]}{I} /media/{ID_SERIAL_SHORT}{I}
+		$mout = array();
+		exec(sprintf('mount /dev/%s%s /media/datm-%s-%s; echo $?;', $argv[1], $i, $_SERVER['ID_SERIAL_SHORT'], $i), $mout);
+		if($mout[count($mout)-1] != 0) {
+			continue;
+		}
+		
 	}
+	
+	//now find the en-shad.img's
+	$shads = getList();
+	for($i=0;$i<count($shads);$i++) {
+		try {
+         $GLOBALS['conf']['loop_img'] = $shads[$i];
+         //try mounting en-shad
+         //losetup
+         //cryptsetup
+         //mount
+         $rtnv = 0;
+         $cmd_out = array();
+         
+			exec(sprintf('losetup %s %s', $GLOBALS['conf']['loop_dev'], $GLOBALS['conf']['loop_img']), $cmd_out, $rtnv);
+			if($rtnv != 0) { backout('losetup'); break; }
+			
+			exec(sprintf('cryptsetup -q --key-file %s luksOpen %s %s', $GLOBALS['conf']['symmetric_key'], $GLOBALS['conf']['loop_dev'], $GLOBALS['conf']['volume_name']), $cmd_out, $rtnv);
+			if($rtnv != 0) { backout('cryptsetup'); break; }
+			
+			//mk the mount dir
+			exec(sprintf('mkdir /media/%s', $GLOBALS['volume_name']), $cmd_out, $rtnv);
+			if($rtnv != 0) { backout('mountdir'); return; }
+			
+			//mount
+			exec(sprintf('mount /dev/mapper/%s /media/%s', $GLOBALS['volume_name'], $GLOBALS['volume_name']), $cmd_out, $rtnv);
+			if($rtnv != 0) { backout('mount'); return; }
+			
+			
+			//save config.
+			//file_put_contents($GLOBALS['conf']['state'], serialize($GLOBALS['conf']));
+		} catch(Exception $e) {  }
+	}
+	
 	//usleep(500000); // 500 milli
-	
-	
 }
+
+//if(remove) {
+
+
 /* NOTES
 	Things to consider for single udev script.
 		-Multiple scripts running. Use the equivilent of a PID file?
